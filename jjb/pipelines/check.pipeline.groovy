@@ -1,4 +1,4 @@
-def SLAVE = 'aws'
+def SLAVE = "HOSTING"
 
 //def test_configurations = ['k8s_manifests', 'os_ansible', 'k8s_juju', 'k8s_helm', 'os_helm']
 def test_configurations = ['k8s_manifests', 'os_ansible', 'k8s_juju']
@@ -162,7 +162,7 @@ pipeline {
                       ) {
                       sh """
                         export ENV_FILE="$WORKSPACE/stackrc.deploy-platform-${name}.env"
-                        "$WORKSPACE/src/progmaticlab/tf-jenkins/infra/aws/remove_workers.sh"
+                        "$WORKSPACE/src/progmaticlab/tf-jenkins/infra/${SLAVE}/remove_workers.sh"
                       """
                     }
                   } catch(err) {
@@ -210,7 +210,7 @@ pipeline {
         [string(credentialsId: 'VEXX_OS_PASSWORD', variable: 'VEXX_OS_PASSWORD')],
         [string(credentialsId: 'VEXX_OS_DOMAIN_NAME', variable: 'VEXX_OS_DOMAIN_NAME')],
         [string(credentialsId: 'VEXX_OS_DOMAIN_NAME', variable: 'VEXX_OS_DOMAIN_NAME')]) {
-        sh "$WORKSPACE/src/progmaticlab/tf-jenkins/infra/aws/cleanup_pipeline_workers.sh"
+        sh "$WORKSPACE/src/progmaticlab/tf-jenkins/infra/${SLAVE}/cleanup_pipeline_workers.sh"
       }
     }
     failure {
