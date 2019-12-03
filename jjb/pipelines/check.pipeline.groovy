@@ -12,6 +12,9 @@ pipeline {
     CONTAINER_REGISTRY = "pnexus.sytes.net:5001"
     DO_BUILD = '1'
   }
+  parameters {
+    choice(name: 'HOSTING', choices: ['aws', 'vexxhost'], description: '')
+    }
   options {
     timestamps()
     timeout(time: 4, unit: 'HOURS')
