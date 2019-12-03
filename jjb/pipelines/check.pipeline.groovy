@@ -153,7 +153,13 @@ pipeline {
                       [[$class: 'AmazonWebServicesCredentialsBinding',
                           credentialsId: 'aws-creds',
                           accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                          secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                          secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']],
+                      [string(credentialsId: 'VEXX_OS_USERNAME', variable: 'VEXX_OS_USERNAME')],
+                      [string(credentialsId: 'VEXX_OS_PROJECT_NAME', variable: 'VEXX_OS_PROJECT_NAME')],
+                      [string(credentialsId: 'VEXX_OS_PASSWORD', variable: 'VEXX_OS_PASSWORD')],
+                      [string(credentialsId: 'VEXX_OS_DOMAIN_NAME', variable: 'VEXX_OS_DOMAIN_NAME')],
+                      [string(credentialsId: 'VEXX_OS_DOMAIN_NAME', variable: 'VEXX_OS_DOMAIN_NAME')]
+                      ) {
                       sh """
                         export ENV_FILE="$WORKSPACE/stackrc.deploy-platform-${name}.env"
                         "$WORKSPACE/src/progmaticlab/tf-jenkins/infra/aws/remove_workers.sh"
@@ -198,7 +204,12 @@ pipeline {
         [[$class: 'AmazonWebServicesCredentialsBinding',
             credentialsId: 'aws-creds',
             accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']],
+        [string(credentialsId: 'VEXX_OS_USERNAME', variable: 'VEXX_OS_USERNAME')],
+        [string(credentialsId: 'VEXX_OS_PROJECT_NAME', variable: 'VEXX_OS_PROJECT_NAME')],
+        [string(credentialsId: 'VEXX_OS_PASSWORD', variable: 'VEXX_OS_PASSWORD')],
+        [string(credentialsId: 'VEXX_OS_DOMAIN_NAME', variable: 'VEXX_OS_DOMAIN_NAME')],
+        [string(credentialsId: 'VEXX_OS_DOMAIN_NAME', variable: 'VEXX_OS_DOMAIN_NAME')]) {
         sh "$WORKSPACE/src/progmaticlab/tf-jenkins/infra/aws/cleanup_pipeline_workers.sh"
       }
     }
