@@ -101,7 +101,12 @@ function pull_eligible_image_names() {
 
 function parse_scan_results() {
   local n=$1
-  cat ${SCAN_REPORTS_STASH}/${n}.json | jq -c -r "[..|objects|select(.nvd_score? or .vendor_score?) | .nvd_score, .vendor_score] | max"
+  local j=${SCAN_REPORTS_STASH}/${n}.json
+  if [[ -e $j ]]; then
+    cat $j | jq -c -r "[..|objects|select(.nvd_score? or .vendor_score?) | .nvd_score, .vendor_score] | max"
+  else
+    echo null
+  fi
 }
 
 function do_scan() {
