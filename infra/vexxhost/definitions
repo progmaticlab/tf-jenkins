@@ -5,6 +5,8 @@ export OS_NETWORK_ID
 export OS_SG="${OS_SG:-default}"
 export MAX_COUNT_VM
 export MAX_COUNT_VCPU
+export CONTROLLER_NODES_COUNT
+export AGENT_NODES_COUNT
 
 #                CPU     Memory     AWS (Canada)   vm_type
 # v2-standard-1   1       4 GB      t2.small       xsmall
