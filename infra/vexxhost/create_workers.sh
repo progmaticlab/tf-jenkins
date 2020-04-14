@@ -1,6 +1,6 @@
 #!/bin/bash -eE
 set -o pipefail
-set -x
+
 # WARNING !!!!
 # it creates only one machine for now !
 
@@ -59,7 +59,8 @@ done
 
 echo "INFO: run nova boot..."
 # run machine for CONTROLLER_NODES and for AGENT_NODES
-while retries > 0 ; do
+while [[ $retries > 0 ]]
+do
   for id in $(seq 1 $con_nodes_count); do
     OBJECT_NAME="CON_NODE_${id}_$BUILD_TAG"
     nova boot --flavor ${INSTANCE_TYPE} \
@@ -82,7 +83,7 @@ while retries > 0 ; do
     done"
     if [[ $? != 0 ]] ; then
       echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "
-      retries=$(( retries-1 ))      
+      retries=$(( retries - 1 ))      
       INSTANCE_IDS=$INSTANCE_IDS $my_dir/remove_workers.sh
       INSTANCE_IDS=""
       CONTROLLER_NODES=""
@@ -96,7 +97,8 @@ while retries > 0 ; do
   done
 
 done
-while retries > 0 ; do
+while [[ $retries > 0 ]]
+do
   if (( ag_nodes_count > 0 )) ; then
     for id in $(seq 1 $ag_nodes_count) ; do
       OBJECT_NAME="AG_NODE_${id}_$BUILD_TAG"
@@ -121,7 +123,7 @@ while retries > 0 ; do
       done"
       if [[ $? != 0 ]] ; then
         echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "
-        retries=$(( retries-1 ))      
+        retries=$(( retries - 1 ))      
         $my_dir/remove_workers.sh
         INSTANCE_IDS=""
         AGENT_NODES=""
