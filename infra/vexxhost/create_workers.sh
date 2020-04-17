@@ -1,9 +1,6 @@
 #!/bin/bash -eE
 set -o pipefail
 
-# WARNING !!!!
-# it creates only one machine for now !
-
 [ "${DEBUG,,}" == "true" ] && set -x
 
 my_file="$(readlink -e "$0")"
@@ -35,46 +32,54 @@ fi
 echo "INFO: VM_TYPE=$VM_TYPE"
 
 #multinodes parameters definition
-con_nodes_count=${CONTROLLER_NODES_COUNT:-1}
-ag_nodes_count=${AGENT_NODES_COUNT:-0}
+CONTROLLER_NODES_COUNT=${CONTROLLER_NODES_COUNT:-1}
+AGENT_NODES_COUNT=${AGENT_NODES_COUNT:-0}
 retries=${MAX_VM_RETRIES:-5}
-total_instances=$(( con_nodes_count + ag_nodes_count ))
-MAX_COUNT_VM=$(( total_instances * MAX_COUNT_VM ))
-MAX_COUNT_VCPU=$(( total_instances * MAX_COUNT_VCPU ))
+TOTAL_INSTANCES=$(( CONTROLLER_NODES_COUNT + AGENT_NODES_COUNT ))
 CONTROLLER_NODES=""
 AGENT_NODES=""
 INSTANCE_IDS=""
+CONTROLLER_INSTANCE_IDS=""
+AGENT=""
 # wait for free resource
 while true; do
-  [[ "$(($(nova list --tags "SLAVE=$SLAVE"  --field status | grep -c 'ID\|ACTIVE') - 1))" < "$MAX_COUNT_VM" ]] && break
+  [[ "$(($(nova list --tags "SLAVE=$SLAVE"  --field status | grep -c 'ID\|ACTIVE') + TOTAL_INSTANCES ))" -lt "$MAX_COUNT_VM" ]] && break
   echo "INFO: waiting for free worker"
   sleep 60
 done
-#ToDo: Use the number of flavor vcpu
+
+INSTANCE_VCPU="$(nova flavor-show $INSTANCE_TYPE | grep vcpus | awk -F'|' '{print $3}')"
+TOTAL_VCPU=$(( INSTANCE_VCPU * total_instances ))
 while true; do
-  [[ "$(nova quota-show --detail | grep cores | sed 's/}.*/}/'| tr -d "}" | awk '{print $NF}')" < "$MAX_COUNT_VCPU" ]] && break
+  [[ "$(($(nova quota-show --detail | grep cores | sed 's/}.*/}/'| tr -d "}" | awk '{print $NF}') + TOTAL_VCPU ))" -lt "$MAX_COUNT_VCPU" ]] && break
   echo "INFO: waiting for CPU resources"
   sleep 60
 done
 
 echo "INFO: run nova boot..."
-# run machine for CONTROLLER_NODES and for AGENT_NODES
-while [[ $retries > 0 ]]
+#Create CONTROLLER nodes
+for ((i=$retries ; i>0; --i))
+echo "INFO: Try to create controller nodes. Attemp ${i}"
 do
-  for id in $(seq 1 $con_nodes_count); do
-    OBJECT_NAME="CON_NODE_${id}_$BUILD_TAG"
-    nova boot --flavor ${INSTANCE_TYPE} \
-              --security-groups ${OS_SG} \
-              --key-name=worker \
-              --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=vexxhost,DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
-              --nic net-name=${OS_NETWORK} \
-              --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
-              --poll \
-              $OBJECT_NAME
-
-    instance_id=$(openstack server show $OBJECT_NAME -c id -f value | tr -d '\n')
-    INSTANCE_IDS+="$instance_id "
-    instance_ip=$(get_instance_ip $OBJECT_NAME)
+  CONTROLLER_OBJECT_NAMES=""
+  CONTROLLER_OBJECT_NAME="CONTROLLER-${BUILD_TAG}"
+  nova boot --flavor ${INSTANCE_TYPE} \
+            --security-groups ${OS_SG} \
+            --key-name=worker \
+            --min-count ${CONTROLLER_NODES_COUNT} \
+            --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
+            --nic net-name=${OS_NETWORK} \
+            --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
+            --poll \
+            $CONTROLLER_OBJECT_NAME
+  ready_nodes=0
+  for ((j=1 ; j<=$CONTROLLER_NODES_COUNT; ++j))
+  do    
+    object_name="${CONTROLLER_OBJECT_NAME}-${j}"  
+    CONTROLLER_OBJECT_NAMES+="$object_name,"  
+    instance_id=$(openstack server show $object_name -c id -f value | tr -d '\n')
+    CONTROLLER_INSTANCE_IDS+="$instance_id,"
+    instance_ip=$(get_instance_ip $object_name)
     CONTROLLER_NODES+="${instance_ip},"
     timeout 300 bash -c "\
     while /bin/true ; do \
@@ -82,66 +87,90 @@ do
         sleep 10 ; \
     done"
     if [[ $? != 0 ]] ; then
-      echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "
-      retries=$(( retries - 1 ))      
-      INSTANCE_IDS=$INSTANCE_IDS $my_dir/remove_workers.sh
-      INSTANCE_IDS=""
-      CONTROLLER_NODES=""
+      echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "          
+      INSTANCE_IDS=$CONTROLLER_INSTANCE_IDS $my_dir/remove_workers.sh      
       break
     fi
-
     image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
     if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
       ${my_dir}/../hooks/${image_up_script}/up.sh
     fi
+    ready_nodes=$(( ready_nodes + 1 ))
   done
-
-done
-while [[ $retries > 0 ]]
-do
-  if (( ag_nodes_count > 0 )) ; then
-    for id in $(seq 1 $ag_nodes_count) ; do
-      OBJECT_NAME="AG_NODE_${id}_$BUILD_TAG"
-      nova boot --flavor ${INSTANCE_TYPE} \
-                --security-groups ${OS_SG} \
-                --key-name=worker \
-                --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=vexxhost,DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
-                --nic net-name=${OS_NETWORK} \
-                --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
-                --poll \
-                $OBJECT_NAME
-
-      instance_id=$(openstack server show $OBJECT_NAME -c id -f value | tr -d '\n')
-      INSTANCE_IDS+="$instance_id "
-      instance_ip=$(get_instance_ip $OBJECT_NAME)
-      AGENT_NODES+="${instance_ip},"
-
-      timeout 300 bash -c "\
-      while /bin/true ; do \
-          ssh -i $WORKER_SSH_KEY $SSH_OPTIONS $IMAGE_SSH_USER@$instance_ip 'uname -a' && break ; \
-          sleep 10 ; \
-      done"
-      if [[ $? != 0 ]] ; then
-        echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "
-        retries=$(( retries - 1 ))      
-        $my_dir/remove_workers.sh
-        INSTANCE_IDS=""
-        AGENT_NODES=""
-        break
-      fi
-      image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
-      if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
-        ${my_dir}/../hooks/${image_up_script}/up.sh
-      fi
-    done
+  if [[ "$ready_nodes" == $CONTROLLER_NODES_COUNT ]] ; then
+     echo "INFO: Controller nodes were created successfully  "
+     echo "INFO: Controller nodes list is ${CONTROLLER_NODES}"
+     instance_ip="$(echo ${CONTROLLER_NODES} | cut -d, -f1)"
+     echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
+     break
+  else
+     CONTROLLER_INSTANCE_IDS=""
+     CONTROLLER_NODES=""
+     continue
   fi
 done
-if [[ -z "$CONTROLLER_NODES" && -z "$AGENT_NODES" ]] ; then
-  echo "ERROR: VMs are not created; Exit"
+if [[ -z "$CONTROLLER_NODES" && "$CONTROLLER_NODES_COUNT" != 0 ]] ; then
+  echo "ERROR: ${CONTROLLER_NODES} are not created; Exit"
+  exit 1
+fi
+for ((i=$retries ; i>0; --i))
+echo "INFO: Try to create agent nodes. Attemp ${i}"
+do
+  AGENT_OBJECT_NAMES=""
+  AGENT_OBJECT_NAME="AGENT-${BUILD_TAG}"
+  nova boot --flavor ${INSTANCE_TYPE} \
+            --security-groups ${OS_SG} \
+            --key-name=worker \
+            --min-count ${AGENT_NODES_COUNT} \
+            --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
+            --nic net-name=${OS_NETWORK} \
+            --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
+            --poll \
+            $AGENT_OBJECT_NAME
+  ready_nodes=0
+  for ((j=1 ; j<=$AGENT_NODES_COUNT; ++j))
+  do    
+    object_name="${AGENT_OBJECT_NAME}-${j}"  
+    AGENT_OBJECT_NAMES+="$object_name,"  
+    instance_id=$(openstack server show $object_name -c id -f value | tr -d '\n')
+    AGENT_INSTANCE_IDS+="$instance_id,"
+    instance_ip=$(get_instance_ip $object_name)
+    AGENT_NODES+="${instance_ip},"
+    timeout 300 bash -c "\
+    while /bin/true ; do \
+        ssh -i $WORKER_SSH_KEY $SSH_OPTIONS $IMAGE_SSH_USER@$instance_ip 'uname -a' && break ; \
+        sleep 10 ; \
+    done"
+    if [[ $? != 0 ]] ; then
+      echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "          
+      INSTANCE_IDS=$AGENT_INSTANCE_IDS $my_dir/remove_workers.sh      
+      break
+    fi
+    image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
+    if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
+      ${my_dir}/../hooks/${image_up_script}/up.sh
+    fi
+    ready_nodes=$(( ready_nodes + 1 ))
+  done
+  if [[ "$ready_nodes" == $AGENT_NODES_COUNT ]] ; then
+     echo "INFO: Agent nodes were created successfully  "
+     echo "INFO: Agent nodes list is ${AGENT_NODES}"     
+     break
+  else
+     AGENT_INSTANCE_IDS=""
+     AGENT_NODES=""
+     continue
+  fi
+done
+if [[ -z "$AGENT_NODES" && "$AGENT_NODES_COUNT" != 0 ]] ; then
+  echo "ERROR: ${AGENT_NODES} are not created; Exit"
   exit 1
 fi
 CONTROLLER_NODES=$(echo "$CONTROLLER_NODES" | sed 's/\(.*\),/\1 /')
 AGENT_NODES=$(echo "$AGENT_NODES" | sed 's/\(.*\),/\1 /')
+AGENT_INSTANCE_IDS=$(echo "$AGENT_INSTANCE_IDS" | sed 's/\(.*\),/\1 /')
+CONTROLLER_INSTANCE_IDS=$(echo "$CONTROLLER_INSTANCE_IDS" | sed 's/\(.*\),/\1 /')
+INSTANCE_IDS="$AGENT_INSTANCE_IDS,$CONTROLLER_INSTANCE_IDS"
 echo "export CONTROLLER_NODES=$CONTROLLER_NODES" >> "$ENV_FILE"
 echo "export AGENT_NODES=$AGENT_NODES" >> "$ENV_FILE"
 echo "export INSTANCE_IDS=$INSTANCE_IDS" >> "$ENV_FILE"
