@@ -34,13 +34,17 @@ echo "INFO: VM_TYPE=$VM_TYPE"
 #multinodes parameters definition
 CONTROLLER_NODES_COUNT=${CONTROLLER_NODES_COUNT:-1}
 AGENT_NODES_COUNT=${AGENT_NODES_COUNT:-0}
-retries=${MAX_VM_RETRIES:-5}
+BUILD_TAG=${BUILD_TAG:-'latest'}
+VM_RETRIES=${VM_RETRIES:-5}
 TOTAL_INSTANCES=$(( CONTROLLER_NODES_COUNT + AGENT_NODES_COUNT ))
 CONTROLLER_NODES=""
 AGENT_NODES=""
 INSTANCE_IDS=""
 CONTROLLER_INSTANCE_IDS=""
-AGENT=""
+AGENT_INSTANCE_IDS=""
+#find vcpu for flavor
+INSTANCE_VCPU="$(nova flavor-show $INSTANCE_TYPE | grep vcpus | awk -F'|' '{print $3}')"
+TOTAL_VCPU=$(( INSTANCE_VCPU * total_instances ))
 # wait for free resource
 while true; do
   [[ "$(($(nova list --tags "SLAVE=$SLAVE"  --field status | grep -c 'ID\|ACTIVE') + TOTAL_INSTANCES ))" -lt "$MAX_COUNT_VM" ]] && break
@@ -48,8 +52,8 @@ while true; do
   sleep 60
 done
 
-INSTANCE_VCPU="$(nova flavor-show $INSTANCE_TYPE | grep vcpus | awk -F'|' '{print $3}')"
-TOTAL_VCPU=$(( INSTANCE_VCPU * total_instances ))
+
+
 while true; do
   [[ "$(($(nova quota-show --detail | grep cores | sed 's/}.*/}/'| tr -d "}" | awk '{print $NF}') + TOTAL_VCPU ))" -lt "$MAX_COUNT_VCPU" ]] && break
   echo "INFO: waiting for CPU resources"
@@ -58,11 +62,11 @@ done
 
 echo "INFO: run nova boot..."
 #Create CONTROLLER nodes
-for ((i=$retries ; i>0; --i))
-echo "INFO: Try to create controller nodes. Attemp ${i}"
+for (( i=1; i<=$VM_RETRIES ; ++i ))
 do
+  echo "INFO: Try to create controller nodes. Attemp ${i}"
   CONTROLLER_OBJECT_NAMES=""
-  CONTROLLER_OBJECT_NAME="CONTROLLER-${BUILD_TAG}"
+  CONTROLLER_OBJECT_NAME="CONTROLLER-${BUILD_TAG}"  
   nova boot --flavor ${INSTANCE_TYPE} \
             --security-groups ${OS_SG} \
             --key-name=worker \
@@ -113,9 +117,9 @@ if [[ -z "$CONTROLLER_NODES" && "$CONTROLLER_NODES_COUNT" != 0 ]] ; then
   echo "ERROR: ${CONTROLLER_NODES} are not created; Exit"
   exit 1
 fi
-for ((i=$retries ; i>0; --i))
-echo "INFO: Try to create agent nodes. Attemp ${i}"
+for (( i=1; i<=$VM_RETRIES ; ++i ))
 do
+  echo "INFO: Try to create agent nodes. Attemp ${i}"
   AGENT_OBJECT_NAMES=""
   AGENT_OBJECT_NAME="AGENT-${BUILD_TAG}"
   nova boot --flavor ${INSTANCE_TYPE} \
