@@ -52,13 +52,92 @@ while true; do
   sleep 60
 done
 
-
-
 while true; do
   [[ "$(($(nova quota-show --detail | grep cores | sed 's/}.*/}/'| tr -d "}" | awk '{print $NF}') + TOTAL_VCPU ))" -lt "$MAX_COUNT_VCPU" ]] && break
   echo "INFO: waiting for CPU resources"
   sleep 60
 done
+
+function create_multiple_instances () {
+  NODES = $1
+  NODES_COUNT = $2  
+  local object_name_prefix = $3
+  NODES_IDS = $4  
+  local name="${object_name_prefix}-${BUILD_TAG}"
+  local instance_id=""
+  local instance_ip=""
+  for (( i=1; i<=$VM_RETRIES ; ++i ))
+  do
+    echo "INFO: Try to create controller nodes. Attemp ${i}"          
+    nova boot --flavor ${INSTANCE_TYPE} \
+              --security-groups ${OS_SG} \
+              --key-name=worker \
+              --min-count ${NODES_COUNT} \
+              --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
+              --nic net-name=${OS_NETWORK} \
+              --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
+              --poll \
+              $name
+    local ready_nodes=0
+    for ((j=1 ; j<=$NODES_COUNT; ++j))
+    do    
+      object_name="${name}-${j}"  
+      object_names+="$object_name,"  
+      instance_id=$(openstack server show $object_name -c id -f value | tr -d '\n')
+      NODES_IDS+="$instance_id,"
+      instance_ip=$(get_instance_ip $object_name)
+      NODES+="${instance_ip},"
+      timeout 300 bash -c "\
+      while /bin/true ; do \
+          ssh -i $WORKER_SSH_KEY $SSH_OPTIONS $IMAGE_SSH_USER@$instance_ip 'uname -a' && break ; \
+          sleep 10 ; \
+      done"
+      if [[ $? != 0 ]] ; then
+        echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "          
+        INSTANCE_IDS=$NODES_IDS $my_dir/remove_workers.sh      
+        break
+      fi
+      image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
+      if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
+        ${my_dir}/../hooks/${image_up_script}/up.sh
+      fi
+      ready_nodes=$(( ready_nodes + 1 ))
+    done
+    if [[ "$ready_nodes" == $NODES_COUNT ]] ; then
+      echo "INFO: Controller nodes were created successfully  "
+      echo "INFO: Controller nodes list is ${NODES}"
+      instance_ip="$(echo ${NODES} | cut -d, -f1)"
+      echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
+      break
+    else
+      NODES_IDS=""
+      NODES=""
+      continue
+    fi
+  done
+  if [[ -z "$NODES" && "$NODES_COUNT" != 0 ]] ; then
+    echo "ERROR: ${object_name_prefix} nodes are not created; Exit"
+    exit 1
+  fi
+}
+
+function create_single_instance () {
+  OBJECT_NAME=$BUILD_TAG
+  nova boot --flavor ${INSTANCE_TYPE} \
+            --security-groups ${OS_SG} \
+            --key-name=worker \
+            --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=vexxhost,DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
+            --nic net-name=${OS_NETWORK} \
+            --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
+            --poll \
+            $OBJECT_NAME
+  
+  instance_id=$(openstack server show $OBJECT_NAME -c id -f value | tr -d '\n')
+  echo "export instance_id=$instance_id" >> "$ENV_FILE"
+  instance_ip=$(get_instance_ip $OBJECT_NAME)
+  echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
+
+}
 
 echo "INFO: run nova boot..."
 #Create CONTROLLER nodes
