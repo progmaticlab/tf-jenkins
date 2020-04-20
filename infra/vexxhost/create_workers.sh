@@ -86,7 +86,7 @@ function create_multiple_instances () {
     for ((j=1 ; j<=$NODES_COUNT; ++j))
     do
       if (( NODES_COUNT == 1 )) ; then
-        object_name="${name}-"
+        object_name="${name}"
       else      
         object_name="${name}-${j}"
       fi
