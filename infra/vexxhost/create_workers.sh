@@ -43,8 +43,9 @@ INSTANCE_IDS=""
 CONTROLLER_INSTANCE_IDS=""
 AGENT_INSTANCE_IDS=""
 #find vcpu for flavor
-INSTANCE_VCPU="$(nova flavor-show $INSTANCE_TYPE | grep vcpus | awk -F'|' '{print $3}')"
-TOTAL_VCPU=$(( INSTANCE_VCPU * total_instances ))
+INSTANCE_VCPU="$(nova flavor-show $INSTANCE_TYPE | grep vcpus | awk -F "|" '{print $3}')"
+INSTANCE_VCPU=$(( $INSTANCE_VCPU + 0 ))
+TOTAL_VCPU=$(( INSTANCE_VCPU * TOTAL_INSTANCES ))
 # wait for free resource
 while true; do
   [[ "$(($(nova list --tags "SLAVE=$SLAVE"  --field status | grep -c 'ID\|ACTIVE') + TOTAL_INSTANCES ))" -lt "$MAX_COUNT_VM" ]] && break
@@ -58,11 +59,11 @@ while true; do
   sleep 60
 done
 
-function create_multiple_instances () {
-  NODES = $1
-  NODES_COUNT = $2
-  local object_name_prefix = $3
-  NODES_IDS = $4
+function create_multiple_instances () {  
+  NODES=""
+  NODES_IDS=""
+  local NODES_COUNT = $1
+  local object_name_prefix = $2
   local name="${object_name_prefix}-${BUILD_TAG}"
   local instance_id=""
   local instance_ip=""
@@ -162,10 +163,14 @@ if (( TOTAL_INSTANCES == 1 )) ; then
 fi
 if (( TOTAL_INSTANCES > 1 )) ; then
   if (( CONTROLLER_NODES_COUNT > 0)) ; then
-    create_multiple_instances $CONTROLLER_NODES $CONTROLLER_NODES_COUNT "CONTROLLER" $CONTROLLER_INSTANCE_IDS
+    create_multiple_instances $CONTROLLER_NODES_COUNT "CONTROLLER"
+    CONTROLLER_NODES=$NODES
+    CONTROLLER_INSTANCE_IDS=$INSTANCE_IDS
   fi
   if (( AGENT_NODES_COUNT > 0)) ; then
-    create_multiple_instances $AGENT_NODES $AGENT_NODES_COUNT "AGENT" $AGENT_INSTANCE_IDS
+    create_multiple_instances $AGENT_NODES_COUNT "AGENT"
+    CONTROLLER_NODES=$NODES
+    CONTROLLER_INSTANCE_IDS=$INSTANCE_IDS
   fi
 fi
 
