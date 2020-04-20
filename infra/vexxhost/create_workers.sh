@@ -11,7 +11,7 @@ source "$my_dir/functions.sh"
 #source "$WORKSPACE/global.env"
 
 #ENV_FILE="$WORKSPACE/stackrc.$JOB_NAME.env"
-ENV_FILE="./stackrc.env
+ENV_FILE="./stackrc.env"
 touch "$ENV_FILE"
 echo "export OS_REGION_NAME=${OS_REGION_NAME}" > "$ENV_FILE"
 echo "export ENVIRONMENT_OS=${ENVIRONMENT_OS}" >> "$ENV_FILE"
