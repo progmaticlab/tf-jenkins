@@ -1,16 +1,19 @@
 #!/bin/bash -eE
 set -o pipefail
+#TODO: Remove on final commit debugging
 DEBUG='true'
 [ "${DEBUG,,}" == "true" ] && set -x
-
+###
 my_file="$(readlink -e "$0")"
 my_dir="$(dirname $my_file)"
 
 source "$my_dir/definitions"
 source "$my_dir/functions.sh"
+#TODO: Uncomment
 #source "$WORKSPACE/global.env"
 
 #ENV_FILE="$WORKSPACE/stackrc.$JOB_NAME.env"
+#TODO: remove on final commit
 ENV_FILE="./stackrc.env"
 touch "$ENV_FILE"
 echo "export OS_REGION_NAME=${OS_REGION_NAME}" > "$ENV_FILE"
@@ -35,7 +38,8 @@ echo "INFO: VM_TYPE=$VM_TYPE"
 #multinodes parameters definition
 CONTROLLER_NODES_COUNT=${CONTROLLER_NODES_COUNT:-1}
 AGENT_NODES_COUNT=${AGENT_NODES_COUNT:-0}
-BUILD_TAG=${BUILD_TAG:-'latest'}
+BUILD_TAG=${BUILD_TAG:-'latest'} #for debug purpose
+SLAVE=${SLAVE:-'vexxhost'} #for debug purpose
 VM_RETRIES=${VM_RETRIES:-5}
 TOTAL_INSTANCES=$(( CONTROLLER_NODES_COUNT + AGENT_NODES_COUNT ))
 CONTROLLER_PREFIX="CONTROLLER"
@@ -62,7 +66,7 @@ while true; do
   sleep 60
 done
 
-function create_multiple_instances () {  
+function create_multiple_instances () {
   NODES=""
   NODES_IDS=""
   local NODES_COUNT=$1
@@ -87,10 +91,9 @@ function create_multiple_instances () {
     do
       if (( NODES_COUNT == 1 )) ; then
         object_name="${name}"
-      else      
+      else
         object_name="${name}-${j}"
-      fi
-      object_names+="$object_name,"  
+      fi       
       instance_id=$(openstack server show $object_name -c id -f value | tr -d '\n')
       NODES_IDS+="$instance_id,"
       instance_ip=$(get_instance_ip $object_name)
@@ -156,8 +159,9 @@ function create_single_instance () {
     else
       INSTANCE_IDS="$instance_id,"
       echo "INFO: VM $instance_id with ip $instance_ip is created with success."
-      echo "export INSTANCE_IDS=$instance_id" >> "$ENV_FILE"
-      echo "export instance_ip=$instance_ip" >> "$ENV_FILE" 
+      echo "export INSTANCE_IDS=$INSTANCE_IDS" >> "$ENV_FILE"
+      echo "export instance_id=$instance_id" >> "$ENV_FILE"
+      echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
       image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
       if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
         ${my_dir}/../hooks/${image_up_script}/up.sh
