@@ -85,7 +85,11 @@ function create_multiple_instances () {
     local ready_nodes=0
     for ((j=1 ; j<=$NODES_COUNT; ++j))
     do
-      object_name="${name}-${j}"  
+      if (( NODES_COUNT == 1 )); then
+        object_name="${name}-"
+      else      
+        object_name="${name}-${j}"
+      fi
       object_names+="$object_name,"  
       instance_id=$(openstack server show $object_name -c id -f value | tr -d '\n')
       NODES_IDS+="$instance_id,"
