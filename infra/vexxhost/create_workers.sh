@@ -65,8 +65,8 @@ done
 function create_multiple_instances () {  
   NODES=""
   NODES_IDS=""
-  local NODES_COUNT = $1
-  local object_name_prefix = $2
+  local NODES_COUNT=$1
+  local object_name_prefix=$2
   local name="${object_name_prefix}-${BUILD_TAG}"
   local instance_id=""
   local instance_ip=""
