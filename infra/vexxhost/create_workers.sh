@@ -85,7 +85,7 @@ function create_multiple_instances () {
     local ready_nodes=0
     for ((j=1 ; j<=$NODES_COUNT; ++j))
     do
-      if (( NODES_COUNT == 1 )); then
+      if (( NODES_COUNT == 1 )) ; then
         object_name="${name}-"
       else      
         object_name="${name}-${j}"
@@ -165,10 +165,16 @@ function create_single_instance () {
     fi
   done
 }
-if (( TOTAL_INSTANCES == 1 )) ; then
+#create instances
+if (( TOTAL_INSTANCES == 0 ))
+then
+  echo "ERROR: Nothing to create. Exit"
+  exit 1
+elif (( TOTAL_INSTANCES == 1 ))
+then
   create_single_instance
-fi
-if (( TOTAL_INSTANCES > 1 )) ; then
+elif (( TOTAL_INSTANCES > 1 ))
+then
   if (( CONTROLLER_NODES_COUNT > 0)) ; then
     create_multiple_instances $CONTROLLER_NODES_COUNT $CONTROLLER_PREFIX
     CONTROLLER_NODES=$NODES
@@ -181,116 +187,6 @@ if (( TOTAL_INSTANCES > 1 )) ; then
   fi
 fi
 
-# echo "INFO: run nova boot..."
-# #Create CONTROLLER nodes
-# for (( i=1; i<=$VM_RETRIES ; ++i ))
-# do
-#   echo "INFO: Try to create controller nodes. Attemp ${i}"
-#   CONTROLLER_OBJECT_NAMES=""
-#   CONTROLLER_OBJECT_NAME="CONTROLLER-${BUILD_TAG}"
-#   nova boot --flavor ${INSTANCE_TYPE} \
-#             --security-groups ${OS_SG} \
-#             --key-name=worker \
-#             --min-count ${CONTROLLER_NODES_COUNT} \
-#             --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
-#             --nic net-name=${OS_NETWORK} \
-#             --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
-#             --poll \
-#             $CONTROLLER_OBJECT_NAME
-#   ready_nodes=0
-#   for ((j=1 ; j<=$CONTROLLER_NODES_COUNT; ++j))
-#   do    
-#     object_name="${CONTROLLER_OBJECT_NAME}-${j}"
-#     CONTROLLER_OBJECT_NAMES+="$object_name,"
-#     instance_id=$(openstack server show $object_name -c id -f value | tr -d '\n')
-#     CONTROLLER_INSTANCE_IDS+="$instance_id,"
-#     instance_ip=$(get_instance_ip $object_name)
-#     CONTROLLER_NODES+="${instance_ip},"
-#     timeout 300 bash -c "\
-#     while /bin/true ; do \
-#         ssh -i $WORKER_SSH_KEY $SSH_OPTIONS $IMAGE_SSH_USER@$instance_ip 'uname -a' && break ; \
-#         sleep 10 ; \
-#     done"
-#     if [[ $? != 0 ]] ; then
-#       echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "
-#       INSTANCE_IDS=$CONTROLLER_INSTANCE_IDS $my_dir/remove_workers.sh
-#       break
-#     fi
-#     image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
-#     if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
-#       ${my_dir}/../hooks/${image_up_script}/up.sh
-#     fi
-#     ready_nodes=$(( ready_nodes + 1 ))
-#   done
-#   if [[ "$ready_nodes" == $CONTROLLER_NODES_COUNT ]] ; then
-#      echo "INFO: Controller nodes were created successfully  "
-#      echo "INFO: Controller nodes list is ${CONTROLLER_NODES}"
-#      instance_ip="$(echo ${CONTROLLER_NODES} | cut -d, -f1)"
-#      echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
-#      break
-#   else
-#      CONTROLLER_INSTANCE_IDS=""
-#      CONTROLLER_NODES=""
-#      continue
-#   fi
-# done
-# if [[ -z "$CONTROLLER_NODES" && "$CONTROLLER_NODES_COUNT" != 0 ]] ; then
-#   echo "ERROR: ${CONTROLLER_NODES} are not created; Exit"
-#   exit 1
-# fi
-# for (( i=1; i<=$VM_RETRIES ; ++i ))
-# do
-#   echo "INFO: Try to create agent nodes. Attemp ${i}"
-#   AGENT_OBJECT_NAMES=""
-#   AGENT_OBJECT_NAME="AGENT-${BUILD_TAG}"
-#   nova boot --flavor ${INSTANCE_TYPE} \
-#             --security-groups ${OS_SG} \
-#             --key-name=worker \
-#             --min-count ${AGENT_NODES_COUNT} \
-#             --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
-#             --nic net-name=${OS_NETWORK} \
-#             --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
-#             --poll \
-#             $AGENT_OBJECT_NAME
-#   ready_nodes=0
-#   for ((j=1 ; j<=$AGENT_NODES_COUNT; ++j))
-#   do    
-#     object_name="${AGENT_OBJECT_NAME}-${j}"  
-#     AGENT_OBJECT_NAMES+="$object_name,"  
-#     instance_id=$(openstack server show $object_name -c id -f value | tr -d '\n')
-#     AGENT_INSTANCE_IDS+="$instance_id,"
-#     instance_ip=$(get_instance_ip $object_name)
-#     AGENT_NODES+="${instance_ip},"
-#     timeout 300 bash -c "\
-#     while /bin/true ; do \
-#         ssh -i $WORKER_SSH_KEY $SSH_OPTIONS $IMAGE_SSH_USER@$instance_ip 'uname -a' && break ; \
-#         sleep 10 ; \
-#     done"
-#     if [[ $? != 0 ]] ; then
-#       echo "ERROR: VM $instance_id with ip $instance_ip is unreachable. Clean up and retry "
-#       INSTANCE_IDS=$AGENT_INSTANCE_IDS $my_dir/remove_workers.sh      
-#       break
-#     fi
-#     image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
-#     if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
-#       ${my_dir}/../hooks/${image_up_script}/up.sh
-#     fi
-#     ready_nodes=$(( ready_nodes + 1 ))
-#   done
-#   if [[ "$ready_nodes" == $AGENT_NODES_COUNT ]] ; then
-#      echo "INFO: Agent nodes were created successfully  "
-#      echo "INFO: Agent nodes list is ${AGENT_NODES}"     
-#      break
-#   else
-#      AGENT_INSTANCE_IDS=""
-#      AGENT_NODES=""
-#      continue
-#   fi
-# done
-# if [[ -z "$AGENT_NODES" && "$AGENT_NODES_COUNT" != 0 ]] ; then
-#   echo "ERROR: ${AGENT_NODES} are not created; Exit"
-#   exit 1
-# fi
 CONTROLLER_NODES=$(echo "$CONTROLLER_NODES" | sed 's/\(.*\),/\1 /')
 AGENT_NODES=$(echo "$AGENT_NODES" | sed 's/\(.*\),/\1 /')
 AGENT_INSTANCE_IDS=$(echo "$AGENT_INSTANCE_IDS" | sed 's/\(.*\),/\1 /')
