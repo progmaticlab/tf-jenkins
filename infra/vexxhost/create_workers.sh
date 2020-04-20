@@ -1,6 +1,6 @@
 #!/bin/bash -eE
 set -o pipefail
-
+DEBUG='true'
 [ "${DEBUG,,}" == "true" ] && set -x
 
 my_file="$(readlink -e "$0")"
@@ -8,9 +8,10 @@ my_dir="$(dirname $my_file)"
 
 source "$my_dir/definitions"
 source "$my_dir/functions.sh"
-source "$WORKSPACE/global.env"
+#source "$WORKSPACE/global.env"
 
-ENV_FILE="$WORKSPACE/stackrc.$JOB_NAME.env"
+#ENV_FILE="$WORKSPACE/stackrc.$JOB_NAME.env"
+ENV_FILE="./stackrc.env
 touch "$ENV_FILE"
 echo "export OS_REGION_NAME=${OS_REGION_NAME}" > "$ENV_FILE"
 echo "export ENVIRONMENT_OS=${ENVIRONMENT_OS}" >> "$ENV_FILE"
@@ -37,6 +38,8 @@ AGENT_NODES_COUNT=${AGENT_NODES_COUNT:-0}
 BUILD_TAG=${BUILD_TAG:-'latest'}
 VM_RETRIES=${VM_RETRIES:-5}
 TOTAL_INSTANCES=$(( CONTROLLER_NODES_COUNT + AGENT_NODES_COUNT ))
+CONTROLLER_PREFIX="CONTROLLER"
+AGENT_PREFIX="AGENT"
 CONTROLLER_NODES=""
 AGENT_NODES=""
 INSTANCE_IDS=""
@@ -135,8 +138,8 @@ function create_single_instance () {
               --poll \
               $OBJECT_NAME
     
-    instance_id=$(openstack server show $OBJECT_NAME -c id -f value | tr -d '\n')    
-    instance_ip=$(get_instance_ip $OBJECT_NAME)   
+    instance_id=$(openstack server show $OBJECT_NAME -c id -f value | tr -d '\n')
+    instance_ip=$(get_instance_ip $OBJECT_NAME)
     timeout 300 bash -c "\
     while /bin/true ; do \
         ssh -i $WORKER_SSH_KEY $SSH_OPTIONS $IMAGE_SSH_USER@$instance_ip 'uname -a' && break ; \
@@ -163,12 +166,12 @@ if (( TOTAL_INSTANCES == 1 )) ; then
 fi
 if (( TOTAL_INSTANCES > 1 )) ; then
   if (( CONTROLLER_NODES_COUNT > 0)) ; then
-    create_multiple_instances $CONTROLLER_NODES_COUNT "CONTROLLER"
+    create_multiple_instances $CONTROLLER_NODES_COUNT $CONTROLLER_PREFIX
     CONTROLLER_NODES=$NODES
     CONTROLLER_INSTANCE_IDS=$INSTANCE_IDS
   fi
   if (( AGENT_NODES_COUNT > 0)) ; then
-    create_multiple_instances $AGENT_NODES_COUNT "AGENT"
+    create_multiple_instances $AGENT_NODES_COUNT $AGENT_PREFIX
     CONTROLLER_NODES=$NODES
     CONTROLLER_INSTANCE_IDS=$INSTANCE_IDS
   fi
