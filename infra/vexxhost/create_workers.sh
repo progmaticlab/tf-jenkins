@@ -45,7 +45,6 @@ instance_vcpu=$(openstack flavor show $INSTANCE_TYPE | awk '/vcpus/{print $4}')
 total_vcpu=$(( instance_vcpu * total_instances ))
 
 function clean_up_job () {
-
   local job_tag=$1
   local termination_list="$(list_instances JobTag=${job_tag})"
   local down_list="$(list_instances JobTag=${job_tag} DOWN=)"
@@ -57,11 +56,9 @@ function clean_up_job () {
       echo "INFO: Instances to terminate: $termination_list"
       nova delete $(echo "$termination_list")
   fi
-
 }
 
-function wait_for_instance_availability () {
-  
+function wait_for_instance_availability () {  
   local instance_ip=$1   
   timeout 300 bash -c "\
   while /bin/true ; do \
@@ -76,21 +73,19 @@ function wait_for_instance_availability () {
   if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
     ${my_dir}/../hooks/${image_up_script}/up.sh
   fi
-
 }
 #start main block with retries
 for (( i=1; i<=$VM_RETRIES ; ++i ))
 do
-  #start block with resource availability on every retry
+  
   CONTROLLER_NODES=""
   AGENT_NODES=""
   CONTROLLER_INSTANCE_IDS=""
   AGENT_INSTANCE_IDS=""
   INSTANCE_IDS=""
-  ready_nodes=0
-  clean_up_happend='false'
+  ready_nodes=0  
   touch "$ENV_FILE"
-
+  #resource availability on every retry
   while true; do
     [[ "$(($(nova list --tags "SLAVE=$SLAVE"  --field status | grep -c 'ID\|ACTIVE') + total_instances ))" -lt "$MAX_COUNT_VM" ]] && break
     echo "INFO: waiting for free worker"
@@ -102,9 +97,9 @@ do
     echo "INFO: waiting for CPU resources"
     sleep 60
   done
+
   #create CONTROLLER NODES
   if (( CONTROLLER_NODES_COUNT > 0 )) ; then
-
     nova boot --flavor ${INSTANCE_TYPE} \
                   --security-groups ${OS_SG} \
                   --key-name=worker \
@@ -115,18 +110,15 @@ do
                   --poll \
                   ${controller_name}
     if [[ $? != 0 ]] ; then
-
       echo "ERROR: Controller instances creation is failed on nova boot. Retry"
       clean_up_job ${controller_job_tag}
       continue
-
-    fi
-    
+    fi    
     CONTROLLER_INSTANCE_IDS="$( list_instances ${controller_job_tag} )"
   fi
+
   #create AGENT NODES
-  if (( AGENT_NODES_COUNT > 0 )) ; then
-    
+  if (( AGENT_NODES_COUNT > 0 )) ; then    
     nova boot --flavor ${INSTANCE_TYPE} \
                   --security-groups ${OS_SG} \
                   --key-name=worker \
@@ -146,10 +138,10 @@ do
     fi
     AGENT_INSTANCE_IDS="$( list_instances ${AGENT_JOB_TAG} )"
   fi
-  INSTANCE_IDS="$CONTROLLER_INSTANCE_IDS $AGENT_INSTANCE_IDS"
+  INSTANCE_IDS="$(echo "$CONTROLLER_INSTANCE_IDS $AGENT_INSTANCE_IDS" | sed 's/ /,/g')"  
   echo "export INSTANCE_IDS=$INSTANCE_IDS" >> "$ENV_FILE"
 
-  #block for checking availability for controller nodes
+  #check availability for controller nodes
   if [[ -n "$CONTROLLER_INSTANCE_IDS" ]] ; then
     for instance_id in $CONTROLLER_INSTANCE_IDS
     do
@@ -158,37 +150,34 @@ do
       if [[ $? != 0 ]] ; then
         echo "ERROR: Node with $instance_ip is not available. Clean up"
         clean_up_job ${controller_job_tag}
-        clean_up_job ${agent_job_tag}
-        clean_up_happend='true'
+        clean_up_job ${agent_job_tag}        
         break
       fi
       ready_nodes=$(( ready_nodes + 1 ))
-      if [[ -z "$CONTROLLER_NODES" ]] ; then
-        #support single node case and old behavior
+      CONTROLLER_NODES+="$instance_ip,"
+      #support single node case and old behavior
+      if (( ready_nodes == 1 )) ; then        
         echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
-        echo "export instance_id=$instance_id" >> "$ENV_FILE"
-        CONTROLLER_NODES+="$instance_ip,"
-      else
-        CONTROLLER_NODES+="$instance_ip,"
       fi
     done
   fi
-  if [[ -n "${AGENT_INSTANCE_IDS}" && "${clean_up_happend}" == 'false' ]] ; then
-    #block for checking availability for agent nodes
-    for instance_id in $AGENT_INSTANCE_IDS
-    do
-      instance_ip=$(get_instance_ip $instance_id)
-      wait_for_instance_availability $instance_ip
-      if [[ $? != 0 ]] ; then
-        echo "ERROR: Node with $instance_ip is not available. Clean up"
-        clean_up_job ${controller_job_tag}
-        clean_up_job ${agent_job_tag}
-        clean_up_happend='true'
-        break
-      fi
-      ready_nodes=$(( ready_nodes + 1 ))
-      AGENT_NODES+="$instance_ip,"
-    done
+  if [[ -n "${AGENT_INSTANCE_IDS}"  ]] ; then
+    if (( ready_nodes == CONTROLLER_NODES_COUNT )) ; then
+    #check availability for agent nodes
+      for instance_id in $AGENT_INSTANCE_IDS
+      do
+        instance_ip=$(get_instance_ip $instance_id)
+        wait_for_instance_availability $instance_ip
+        if [[ $? != 0 ]] ; then
+          echo "ERROR: Node with $instance_ip is not available. Clean up"
+          clean_up_job ${controller_job_tag}
+          clean_up_job ${agent_job_tag}          
+          break
+        fi
+        ready_nodes=$(( ready_nodes + 1 ))
+        AGENT_NODES+="$instance_ip,"
+      done
+    fi
   fi
   #check if all nodes are created then exit from retry loop
   if (( ready_nodes == total_instances )) ; then
