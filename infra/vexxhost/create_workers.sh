@@ -34,8 +34,10 @@ then
   exit 1
 fi
 
-CONTROLLER_JOB_TAG=${CONTROLLER_JOB_TAG:-"CONTROLLER-${BUILD_TAG}"}
-AGENT_JOB_TAG=${AGENT_JOB_TAG:-"AGENT-$BUILD_TAG"}
+controller_name="CONTROLLER-${BUILD_TAG}"
+agent_name="AGENT-${BUILD_TAG}"
+controller_job_tag="JobTag=${controller_name}"
+agent_job_tag="JobTag=${agent_name}"
 #find vcpu for flavor
 instance_vcpu=$(openstack flavor show $INSTANCE_TYPE | awk '/vcpus/{print $4}')
 total_vcpu=$(( instance_vcpu * total_instances ))
@@ -77,7 +79,7 @@ function wait_for_instance_availability () {
 #start main block with retries
 for (( i=1; i<=$VM_RETRIES ; ++i ))
 do
-  #start block with resource avaiability on every retry
+  #start block with resource availability on every retry
   CONTROLLER_NODES=""
   AGENT_NODES=""
   CONTROLLER_INSTANCE_IDS=""
@@ -99,43 +101,44 @@ do
     sleep 60
   done
   #create CONTROLLER NODES
-  if (( CONTROLLER_NODES_COUNT > 0)) ; then
+  if (( CONTROLLER_NODES_COUNT > 0 )) ; then
 
     nova boot --flavor ${INSTANCE_TYPE} \
                   --security-groups ${OS_SG} \
                   --key-name=worker \
                   --min-count ${CONTROLLER_NODES_COUNT} \
-                  --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},JobTag=${CONTROLLER_JOB_TAG},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
+                  --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},${controller_job_tag},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
                   --nic net-name=${OS_NETWORK} \
                   --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
                   --poll \
-                  ${CONTROLLER_JOB_TAG}
+                  ${controller_name}
     if [[ $? != 0 ]] ; then
 
       echo "ERROR: Controller instances creation is failed on nova boot. Retry"
-      clean_up_job ${CONTROLLER_JOB_TAG}
+      clean_up_job ${controller_job_tag}
       continue
 
     fi
-    CONTROLLER_INSTANCE_IDS="$( list_instances ${CONTROLLER_JOB_TAG} )"
+    
+    CONTROLLER_INSTANCE_IDS="$( list_instances ${controller_job_tag} )"
   fi
   #create AGENT NODES
-  if (( AGENT_NODES_COUNT > 0)) ; then
+  if (( AGENT_NODES_COUNT > 0 )) ; then
     
     nova boot --flavor ${INSTANCE_TYPE} \
                   --security-groups ${OS_SG} \
                   --key-name=worker \
                   --min-count ${AGENT_NODES_COUNT} \
-                  --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},JobTag=${AGENT_JOB_TAG},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
+                  --tags "PipelineBuildTag=${PIPELINE_BUILD_TAG},${agent_job_tag},SLAVE=${SLAVE},DOWN=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}" \
                   --nic net-name=${OS_NETWORK} \
                   --block-device source=image,id=$IMAGE,dest=volume,shutdown=remove,size=120,bootindex=0 \
                   --poll \
-                  ${AGENT_JOB_TAG}
+                  ${agent_name}
     if [[ $? != 0 ]] ; then
 
       echo "ERROR: Controller instances creation is failed on nova boot. Retry"
-      clean_up_job ${CONTROLLER_JOB_TAG}
-      clean_up_job ${AGENT_JOB_TAG}
+      clean_up_job ${controller_job_tag}
+      clean_up_job ${agent_job_tag}
       continue
 
     fi
@@ -152,8 +155,8 @@ do
       wait_for_instance_availability $instance_ip
       if [[ $? != 0 ]] ; then
         echo "ERROR: Node with $instance_ip is not available. Clean up"
-        clean_up_job ${CONTROLLER_JOB_TAG}
-        clean_up_job ${AGENT_JOB_TAG}
+        clean_up_job ${controller_job_tag}
+        clean_up_job ${agent_job_tag}
         clean_up_happend='true'
         break
       fi
@@ -176,8 +179,8 @@ do
       wait_for_instance_availability $instance_ip
       if [[ $? != 0 ]] ; then
         echo "ERROR: Node with $instance_ip is not available. Clean up"
-        clean_up_job ${CONTROLLER_JOB_TAG}
-        clean_up_job ${AGENT_JOB_TAG}
+        clean_up_job ${controller_job_tag}
+        clean_up_job ${agent_job_tag}
         clean_up_happend='true'
         break
       fi
