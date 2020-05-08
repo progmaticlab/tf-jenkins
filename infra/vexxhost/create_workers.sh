@@ -10,6 +10,10 @@ source "$my_dir/definitions"
 source "$my_dir/functions.sh"
 source "$WORKSPACE/global.env"
 
+# parameters for workers
+VM_TYPE=${VM_TYPE:-'medium'}
+NODES_COUNT=${NODES_COUNT:-1}
+
 ENV_FILE="$WORKSPACE/stackrc.$JOB_NAME.env"
 touch "$ENV_FILE"
 echo "export OS_REGION_NAME=${OS_REGION_NAME}" > "$ENV_FILE"
@@ -23,24 +27,12 @@ echo "export IMAGE=$IMAGE" >> "$ENV_FILE"
 IMAGE_SSH_USER=${OS_IMAGE_USERS["${ENVIRONMENT_OS^^}"]}
 echo "export IMAGE_SSH_USER=$IMAGE_SSH_USER" >> "$ENV_FILE"
 
-VM_TYPE=${VM_TYPE:-'medium'}
 INSTANCE_TYPE=${VM_TYPES[$VM_TYPE]}
 if [[ -z "$INSTANCE_TYPE" ]]; then
     echo "ERROR: invalid VM_TYPE=$VM_TYPE"
     exit 1
 fi
 echo "INFO: VM_TYPE=$VM_TYPE"
-
-VM_RETRIES=${VM_RETRIES:-5}
-
-NODES_COUNT=${NODES_COUNT:-1}
-ready_nodes=0
-
-instance_name="${VM_TYPE}-${BUILD_TAG}"
-job_tag="JobTag=${instance_name}"
-
-instance_vcpu=$(openstack flavor show $INSTANCE_TYPE | awk '/vcpus/{print $4}')
-total_vcpu=$(( instance_vcpu * $NODES_COUNT ))
 
 function clean_up_job () {
    local job_tag=$1
@@ -67,17 +59,26 @@ function wait_for_instance_availability () {
      echo "ERROR: VM  with ip $instance_ip is unreachable. Exit "
      return 1
    fi
+   export instance_ip
    image_up_script=${OS_IMAGES_UP["${ENVIRONMENT_OS^^}"]}
    if [[ -n "$image_up_script" && -e ${my_dir}/../hooks/${image_up_script}/up.sh ]] ; then
      ${my_dir}/../hooks/${image_up_script}/up.sh
    fi
  }
 
+ready_nodes=0
+
+instance_name="${VM_TYPE}-${BUILD_TAG}"
+job_tag="JobTag=${instance_name}"
+
+instance_vcpu=$(openstack flavor show $INSTANCE_TYPE | awk '/vcpus/{print $4}')
+total_vcpu=$(( instance_vcpu * $NODES_COUNT ))
+
 for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
   INSTANCE_IDS=""
   INSTANCE_IPS=""
   while true; do
-     [[ "$(($(nova list --tags "SLAVE=$SLAVE"  --field status | grep -c 'ID\|ACTIVE') + total_instances ))" -lt "$MAX_COUNT_VM" ]] && break
+     [[ "$(($(nova list --tags "SLAVE=$SLAVE"  --field status | grep -c 'ID\|ACTIVE') + NODES_COUNT ))" -lt "$MAX_COUNT_VM" ]] && break
      echo "INFO: waiting for free worker"
      sleep 60
   done
@@ -101,6 +102,7 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
   if [[ $? != 0 ]] ; then
     echo "ERROR: Instances creation is failed on nova boot. Retry"
     clean_up_job ${job_tag}
+    sleep 60
     continue
   fi
   INSTANCE_IDS="$( list_instances ${job_tag} )"
@@ -120,13 +122,17 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
   fi
 
   if (( ready_nodes == NODES_COUNT )) ; then
-     if [[ -n "$INSTANCE_IPS" ]] ; then
-      export INSTANCE_IDS
-      export INSTANCE_IPS
-     fi
-     break
-   else
+    if [[ -n "$INSTANCE_IPS" ]] ; then
+      echo "export INSTANCE_IDS=$INSTANCE_IDS" >> "$ENV_FILE"
+      echo "export INSTANCE_IPS=$INSTANCE_IPS" >> "$ENV_FILE"
+      instance_id=`echo $INSTANCE_IDS | cut -d' ' -f1`
+      echo "export instance_id=$instance_id" >> "$ENV_FILE"
+      instance_ip=`echo $INSTANCE_IPS | cut -d',' -f1`
+      echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
+    fi
+    break
+  else
      echo "INFO: Nodes are not created. Retry"
      continue
-   fi
+  fi
 done
