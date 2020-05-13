@@ -130,9 +130,13 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
       instance_ip=`echo $INSTANCE_IPS | cut -d',' -f1`
       echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
     fi
-    break
+    exit 0
   else
      echo "INFO: Nodes are not created. Retry"
      continue
   fi
 done
+
+echo "INFO: Nodes are not created."
+touch "$ENV_FILE"
+exit 1
