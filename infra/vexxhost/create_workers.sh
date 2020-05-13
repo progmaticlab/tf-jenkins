@@ -36,8 +36,8 @@ echo "INFO: VM_TYPE=$VM_TYPE"
 
 function clean_up_job () {
    local job_tag=$1
-   local termination_list="$(list_instances JobTag=${job_tag})"
-   local down_list="$(list_instances JobTag=${job_tag} DOWN=)"
+   local termination_list="$(list_instances ${job_tag})"
+   local down_list="$(list_instances ${job_tag} DOWN=)"
    if [[ -n "${termination_list}" ]] ; then
        if [[ -n "${down_list}" ]] ; then
          down_instances $down_list || true
