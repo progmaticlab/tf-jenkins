@@ -83,11 +83,11 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
                   "Name=tag:SLAVE,Values=${SLAVE}" \
         --query 'Reservations[*].Instances[*].[InstanceId]'\
         --output text | wc -l)
-    [[ (( "$INSTANCES_COUNT" + "$NODES_COUNT" )) -lt "$MAX_COUNT" ]] && break
+    [[ $(( $INSTANCES_COUNT + $NODES_COUNT )) -lt $MAX_COUNT ]] && break
     sleep 60
   done
 
-  INSTANCE_IDS=$(aws ec2 run-instances \
+  instance_ids=$(aws ec2 run-instances \
       --region $AWS_REGION \
       --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$iname},{Key=PipelineBuildTag,Value=$PIPELINE_BUILD_TAG},{Key=JobTag,Value=$iname},{Key=SLAVE,Value=aws},{Key=DOWN,Value=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}}]" \
       --block-device-mappings "[${bdm}]" \
@@ -98,7 +98,7 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
       --security-group-ids $AWS_SG \
       --subnet-id $AWS_SUBNET | \
       jq -r '.Instances[].InstanceId')
-  for instance_id in $INSTANCE_IDS ; do
+  for instance_id in $instance_ids ; do
     wait_for_instance_availability $instance_id
     if [[ $? != 0 ]] ; then
       echo "ERROR: Node $instance_id is not available. Clean up"
@@ -109,6 +109,7 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
     ready_nodes=$(( ready_nodes + 1 ))
 
     instance_ip=$(get_instance_ip $instance_id)
+    INSTANCE_IDS+="$instance_id "
     INSTANCE_IPS+="$instance_ip,"
   done
 
