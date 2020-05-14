@@ -75,6 +75,7 @@ instance_vcpu=$(openstack flavor show $INSTANCE_TYPE | awk '/vcpus/{print $4}')
 total_vcpu=$(( instance_vcpu * $NODES_COUNT ))
 
 for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
+  ready_nodes=0
   INSTANCE_IDS=""
   INSTANCE_IPS=""
   while true; do
