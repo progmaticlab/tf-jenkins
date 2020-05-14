@@ -52,6 +52,5 @@ if [[ -n $CONTROLLER_NODES && -n $AGENT_NODES ]] ; then
   exit 0
 else
   echo "ERROR: Instances were not created. Exit"
-  "$my_dir/../../../infra/${SLAVE}/remove_workers.sh"
   exit 1
 fi

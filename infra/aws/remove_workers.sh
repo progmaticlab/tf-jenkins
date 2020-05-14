@@ -11,4 +11,10 @@ my_dir="$(dirname $my_file)"
 source "$my_dir/definitions"
 source "$my_dir/functions.sh"
 
-terminate_instances $instance_id
+if [[ -n $INSTANCE_IDS ]] ; then
+    instance_ids=$(echo "$INSTANCE_IDS" | sed 's/,/ /g')
+else
+    instance_ids=$instance_id
+fi
+
+terminate_instances $instance_ids
