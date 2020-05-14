@@ -87,9 +87,14 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
     sleep 60
   done
 
+  if [[ -n ${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]} ]] ; then
+    down_tag=",{Key=DOWN,Value=${OS_IMAGES_DOWN[${ENVIRONMENT_OS^^}]}}"
+  else
+    down_tag=''
+  fi
   instance_ids=$(aws ec2 run-instances \
       --region $AWS_REGION \
-      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$iname},{Key=PipelineBuildTag,Value=$PIPELINE_BUILD_TAG},{Key=JobTag,Value=$iname},{Key=SLAVE,Value=aws},{Key=DOWN,Value=${OS_IMAGES_DOWN["${ENVIRONMENT_OS^^}"]}}]" \
+      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$iname},{Key=PipelineBuildTag,Value=$PIPELINE_BUILD_TAG},{Key=JobTag,Value=$iname},{Key=SLAVE,Value=aws} $down_tag ]" \
       --block-device-mappings "[${bdm}]" \
       --image-id $IMAGE \
       --count $NODES_COUNT \
