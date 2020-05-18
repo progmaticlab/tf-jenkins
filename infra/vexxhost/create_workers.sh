@@ -34,19 +34,19 @@ if [[ -z "$INSTANCE_TYPE" ]]; then
 fi
 echo "INFO: VM_TYPE=$VM_TYPE"
 
-function clean_up_job () {
-   local job_tag=$1
-   local termination_list="$(list_instances ${job_tag})"
-   local down_list="$(list_instances ${job_tag} DOWN=)"
-   if [[ -n "${termination_list}" ]] ; then
-       if [[ -n "${down_list}" ]] ; then
-         down_instances $down_list || true
-       fi
+function cleanup () {
+  local job_tag=$1
+  local termination_list="$(list_instances ${job_tag})"
+  if [[ -n "${termination_list}" ]] ; then
+    local down_list="$(list_instances ${job_tag} DOWN=)"
+      if [[ -n "${down_list}" ]] ; then
+        down_instances $down_list || true
+      fi
 
-        echo "INFO: Instances to terminate: $termination_list"
-       nova delete $(echo "$termination_list")
-   fi
- }
+      echo "INFO: Instances to terminate: $termination_list"
+      nova delete $(echo "$termination_list")
+  fi
+}
 
 function wait_for_instance_availability () {
    local instance_ip=$1
@@ -68,7 +68,7 @@ function wait_for_instance_availability () {
 
 ready_nodes=0
 
-instance_name="${VM_TYPE}-${BUILD_TAG}"
+instance_name="${WORKER_NAME_PREFIX}_${BUILD_TAG}"
 job_tag="JobTag=${instance_name}"
 
 instance_vcpu=$(openstack flavor show $INSTANCE_TYPE | awk '/vcpus/{print $4}')
@@ -102,7 +102,7 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
 
   if [[ $? != 0 ]] ; then
     echo "ERROR: Instances creation is failed on nova boot. Retry"
-    clean_up_job ${job_tag}
+    cleanup ${job_tag}
     sleep 60
     continue
   fi
@@ -111,10 +111,9 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
   if [[ -n "$INSTANCE_IDS" ]] ; then
     for instance_id in $INSTANCE_IDS ; do
       instance_ip=$(get_instance_ip $instance_id)
-      wait_for_instance_availability $instance_ip
-      if [[ $? != 0 ]] ; then
+      if ! wait_for_instance_availability $instance_ip ; then
         echo "ERROR: Node with $instance_ip is not available. Clean up"
-        clean_up_job ${job_tag}
+        cleanup ${job_tag}
         break
       fi
       ready_nodes=$(( ready_nodes + 1 ))
@@ -124,17 +123,13 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
 
   if (( ready_nodes == NODES_COUNT )) ; then
     if [[ -n "$INSTANCE_IPS" ]] ; then
+      INSTANCE_IDS="$(echo "$INSTANCE_IDS" | sed 's/ /,/g')"
       echo "export INSTANCE_IDS=$INSTANCE_IDS" >> "$ENV_FILE"
       echo "export INSTANCE_IPS=$INSTANCE_IPS" >> "$ENV_FILE"
-      instance_id=`echo $INSTANCE_IDS | cut -d' ' -f1`
-      echo "export instance_id=$instance_id" >> "$ENV_FILE"
       instance_ip=`echo $INSTANCE_IPS | cut -d',' -f1`
       echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
     fi
     exit 0
-  else
-     echo "INFO: Nodes are not created. Retry"
-     continue
   fi
 done
 

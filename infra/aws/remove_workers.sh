@@ -11,10 +11,7 @@ my_dir="$(dirname $my_file)"
 source "$my_dir/definitions"
 source "$my_dir/functions.sh"
 
-if [[ -n $INSTANCE_IDS ]] ; then
-    instance_ids=$(echo "$INSTANCE_IDS" | sed 's/,/ /g')
-else
-    instance_ids=$instance_id
-fi
+job_tag="${WORKER_NAME_PREFIX}_$BUILD_TAG"
+instance_ids="$(list_instances ${job_tag})"
 
 terminate_instances $instance_ids

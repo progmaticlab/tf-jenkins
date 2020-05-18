@@ -13,11 +13,8 @@ source "$my_dir/functions.sh"
 source "$WORKSPACE/global.env"
 
 
-if [[ -n $INSTANCE_IDS ]] ; then
-    instance_ids=$(echo "$INSTANCE_IDS" | sed 's/,/ /g')
-else
-    instance_ids=$instance_id
-fi
+job_tag="JobTag=${WORKER_NAME_PREFIX}_${BUILD_TAG}"
+instance_ids="$( list_instances ${job_tag} )"
 
 for instance_id in $instance_ids ; do
   if nova show "$instance_id" | grep 'locked' | grep 'False'; then

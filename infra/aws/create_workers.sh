@@ -30,26 +30,25 @@ IMAGE_SSH_USER_VAR_NAME="IMAGE_${ENVIRONMENT_OS^^}_SSH_USER"
 IMAGE_SSH_USER=${!IMAGE_SSH_USER_VAR_NAME}
 echo "export IMAGE_SSH_USER=$IMAGE_SSH_USER" >> "$ENV_FILE"
 
-VM_TYPE=${VM_TYPE:-'medium'}
 INSTANCE_TYPE=${VM_TYPES[$VM_TYPE]}
 if [[ -z "$INSTANCE_TYPE" ]]; then
     echo "ERROR: invalid VM_TYPE=$VM_TYPE"
     exit 1
 fi
 
-function clean_up_job () {
-   local job_tag=$1
-   local termination_list="$(list_instances ${job_tag})"
-   if [[ -n "${termination_list}" ]] ; then
-      echo "INFO: Instances to terminate: $termination_list"
-      terminate_instances $termination_list
-   fi
+function cleanup () {
+  local job_tag=$1
+  local termination_list="$(list_instances ${job_tag})"
+  if [[ -n "${termination_list}" ]] ; then
+    echo "INFO: Instances to terminate: $termination_list"
+    terminate_instances $termination_list
+  fi
  }
 
 function wait_for_instance_availability () {
   local instance_id=$1
   aws ec2 wait instance-running --region $AWS_REGION \
-      --instance-ids $instance_id
+    --instance-ids $instance_id
   instance_ip=$(get_instance_ip $instance_id)
 
   timeout 300 bash -c "\
@@ -66,7 +65,7 @@ function wait_for_instance_availability () {
 }
 
 # Spin VM
-iname="${VM_TYPE}-$BUILD_TAG"
+iname="${WORKER_NAME_PREFIX}_$BUILD_TAG"
 bdm='{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":120,"DeleteOnTermination":true}}'
 job_tag="$iname"
 
@@ -78,11 +77,11 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
   # wait for resource
   while true; do
     INSTANCES_COUNT=$(aws ec2 describe-instances \
-        --region "$AWS_REGION" \
-        --filters  "Name=instance-state-code,Values=16" \
-                  "Name=tag:SLAVE,Values=${SLAVE}" \
-        --query 'Reservations[*].Instances[*].[InstanceId]'\
-        --output text | wc -l)
+      --region "$AWS_REGION" \
+      --filters  "Name=instance-state-code,Values=16" \
+                 "Name=tag:SLAVE,Values=${SLAVE}" \
+      --query 'Reservations[*].Instances[*].[InstanceId]'\
+      --output text | wc -l)
     [[ $(( $INSTANCES_COUNT + $NODES_COUNT )) -lt $MAX_COUNT ]] && break
     sleep 60
   done
@@ -104,17 +103,16 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
       --subnet-id $AWS_SUBNET | \
       jq -r '.Instances[].InstanceId')
   for instance_id in $instance_ids ; do
-    wait_for_instance_availability $instance_id
-    if [[ $? != 0 ]] ; then
+    if ! wait_for_instance_availability $instance_id ; then
       echo "ERROR: Node $instance_id is not available. Clean up"
-      clean_up_job ${job_tag}
+      cleanup ${job_tag}
       break
     fi
 
     ready_nodes=$(( ready_nodes + 1 ))
 
     instance_ip=$(get_instance_ip $instance_id)
-    INSTANCE_IDS+="$instance_id "
+    INSTANCE_IDS+="$instance_id,"
     INSTANCE_IPS+="$instance_ip,"
   done
 
@@ -122,14 +120,9 @@ for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
     echo "export INSTANCE_IDS=$INSTANCE_IDS" >> "$ENV_FILE"
     echo "export INSTANCE_IPS=$INSTANCE_IPS" >> "$ENV_FILE"
 
-    instance_id=`echo $INSTANCE_IDS | cut -d' ' -f1`
-    echo "export instance_id=$instance_id" >> "$ENV_FILE"
     instance_ip=`echo $INSTANCE_IPS | cut -d',' -f1`
     echo "export instance_ip=$instance_ip" >> "$ENV_FILE"
     exit 0
-  else
-     echo "INFO: Nodes are not created. Retry"
-     continue
   fi
 done
 
