@@ -13,7 +13,7 @@ source "$my_dir/functions.sh"
 source "$WORKSPACE/global.env"
 
 
-job_tag="JobTag=${WORKER_NAME_PREFIX}_${BUILD_TAG}"
+job_tag="JobTag=${BUILD_TAG}"
 instance_ids="$( list_instances ${job_tag} )"
 
 for instance_id in $instance_ids ; do

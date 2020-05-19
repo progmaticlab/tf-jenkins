@@ -67,7 +67,7 @@ function wait_for_instance_availability () {
 # Spin VM
 iname="${WORKER_NAME_PREFIX}_$BUILD_TAG"
 bdm='{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":120,"DeleteOnTermination":true}}'
-job_tag="$iname"
+job_tag="$BUILD_TAG"
 
 for (( i=1; i<=$VM_RETRIES ; ++i )) ; do
   ready_nodes=0

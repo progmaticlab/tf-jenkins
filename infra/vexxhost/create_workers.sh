@@ -69,7 +69,7 @@ function wait_for_instance_availability () {
 ready_nodes=0
 
 instance_name="${WORKER_NAME_PREFIX}_${BUILD_TAG}"
-job_tag="JobTag=${instance_name}"
+job_tag="JobTag=${BUILD_TAG}"
 
 instance_vcpu=$(openstack flavor show $INSTANCE_TYPE | awk '/vcpus/{print $4}')
 total_vcpu=$(( instance_vcpu * $NODES_COUNT ))
