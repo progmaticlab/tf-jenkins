@@ -32,6 +32,13 @@ if grep -q "tungstenfabric/tf-dev-env" ./patchsets-info.json ; then
   export DEVENV_TAG="sandbox-$CONTRAIL_CONTAINER_TAG$TAG_SUFFIX"
 fi
 
+function has_image() {
+  local tags=$(curl -s --show-error http://${CONTAINER_REGISTRY}/v2/${DEVENV_IMAGE_NAME}/tags/list | jq -c -r '.tags[]')
+  echo "INFO: looking for a tag $DEVENV_TAG in found tags for ${DEVENV_IMAGE_NAME}:"
+  echo "$tags" | sort
+  echo "$tags" | grep -q "^${DEVENV_TAG}\$"
+}
+
 # build queens for test container always and add OPENSTACK_VERSION if it's different
 openstack_versions='queens'
 if [[ "$OPENSTACK_VERSION" != 'queens' ]]; then

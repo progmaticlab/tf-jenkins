@@ -137,35 +137,35 @@
         depends-on:
           - fetch-sources-centos:
               inherit-keys:
-                - DEVENV_TAG
+#                - DEVENV_TAG
                 - UNITTEST_TARGETS
       test-unit-opserver:
         stream: test-unit
         depends-on:
           - fetch-sources-centos:
               inherit-keys:
-                - DEVENV_TAG
+#                - DEVENV_TAG
                 - UNITTEST_TARGETS
       test-unit-bgp:
         stream: test-unit
         depends-on:
           - fetch-sources-centos:
               inherit-keys:
-                - DEVENV_TAG
+#                - DEVENV_TAG
                 - UNITTEST_TARGETS
       test-unit-group-one:
         stream: test-unit
         depends-on:
           - fetch-sources-centos:
               inherit-keys:
-                - DEVENV_TAG
+#                - DEVENV_TAG
                 - UNITTEST_TARGETS
       test-unit-ungrouped:
         stream: test-unit
         depends-on:
           - fetch-sources-centos:
               inherit-keys:
-                - DEVENV_TAG
+#                - DEVENV_TAG
                 - UNITTEST_TARGETS
 
 - template:
@@ -174,10 +174,10 @@
       - build-centos
     jobs:
       test-unit-ui:
-        depends-on:
-          - fetch-sources-centos:
-              inherit-keys:
-                - DEVENV_TAG
+#        depends-on:
+#          - fetch-sources-centos:
+#              inherit-keys:
+#                - DEVENV_TAG
         vars:
           TARGET: ui
 
